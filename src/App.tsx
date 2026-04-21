@@ -26,11 +26,25 @@ function App() {
     }
   }
 
-  // JS-based window dragging (replaces -webkit-app-region: drag to avoid scroll interception)
-  const handleDragMouseDown = useCallback((e: React.MouseEvent) => {
+  // JS-based window dragging: 偵測點擊是否在邊緣區域，避免覆蓋層擋住 webview 點擊事件
+  const handleContainerMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return
+    const { clientX, clientY } = e
+    const { width, height } = e.currentTarget.getBoundingClientRect()
+    const inEdge =
+      clientY <= 16 ||          // 頂部 16px
+      clientX <= 12 ||          // 左側 12px
+      clientX >= width - 12 ||  // 右側 12px
+      clientY >= height - 12    // 底部 12px
+    if (!inEdge) return
     isDraggingWindow.current = true
     dragStart.current = { x: e.screenX, y: e.screenY }
+  }, [])
+
+  const handleContainerDoubleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.clientY <= 16) {
+      ;(window as any).ipcRenderer.send('toggle-mini-player')
+    }
   }, [])
 
   useEffect(() => {
@@ -176,10 +190,12 @@ function App() {
   }, [])
 
   return (
-    <div 
+    <div
       className="relative w-full h-full overflow-hidden group select-none bg-transparent"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
+      onMouseDown={handleContainerMouseDown}
+      onDoubleClick={handleContainerDoubleClick}
     >
       {/* Ghost Mode Overlay Indicator */}
       {isGhostMode && (
@@ -205,18 +221,6 @@ function App() {
           </div>
         </div>
       )}
-
-      {/* Invisible Edge Drag Regions (T, L, R, B) — 使用 JS 拖曳取代 -webkit-app-region，避免攔截滾輪事件 */}
-      <div
-        className="absolute top-0 left-0 w-full h-4 z-40 select-none"
-        onMouseDown={handleDragMouseDown}
-        onDoubleClick={() => (window as any).ipcRenderer.send('toggle-mini-player')}
-        style={{ cursor: 'grab' }}
-        title="拖曳移動視窗 / 雙擊切換迷你模式"
-      />
-      <div className="absolute inset-y-0 left-0 w-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
-      <div className="absolute inset-y-0 right-0 w-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
-      <div className="absolute bottom-0 left-0 w-full h-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
 
       {/* Controls Overlay */}
       <div 
