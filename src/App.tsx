@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Home, Ghost, Maximize, Minimize, MousePointer2, EyeOff } from 'lucide-react'
 import './index.css'
 
@@ -13,6 +13,8 @@ function App() {
   const webviewRef = useRef<any>(null)
   const lastClipboard = useRef<string>('')
   const homeUrl = 'https://www.youtube.com'
+  const isDraggingWindow = useRef(false)
+  const dragStart = useRef<{ x: number; y: number } | null>(null)
 
   const handleClose = () => {
     (window as any).ipcRenderer.send('window-close')
@@ -23,6 +25,33 @@ function App() {
       webviewRef.current.loadURL(homeUrl)
     }
   }
+
+  // JS-based window dragging (replaces -webkit-app-region: drag to avoid scroll interception)
+  const handleDragMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    isDraggingWindow.current = true
+    dragStart.current = { x: e.screenX, y: e.screenY }
+  }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isDraggingWindow.current || !dragStart.current) return
+      const deltaX = e.screenX - dragStart.current.x
+      const deltaY = e.screenY - dragStart.current.y
+      dragStart.current = { x: e.screenX, y: e.screenY }
+      ;(window as any).ipcRenderer.send('window-drag', { deltaX, deltaY })
+    }
+    const handleMouseUp = () => {
+      isDraggingWindow.current = false
+      dragStart.current = null
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
 
   // Ghost Mode
   const enableGhostMode = () => {
@@ -177,16 +206,17 @@ function App() {
         </div>
       )}
 
-      {/* Invisible Edge Drag Regions (T, L, R, B) */}
-      <div 
-        className="absolute top-0 left-0 w-full h-4 z-40 drag-region" 
+      {/* Invisible Edge Drag Regions (T, L, R, B) — 使用 JS 拖曳取代 -webkit-app-region，避免攔截滾輪事件 */}
+      <div
+        className="absolute top-0 left-0 w-full h-4 z-40 select-none"
+        onMouseDown={handleDragMouseDown}
         onDoubleClick={() => (window as any).ipcRenderer.send('toggle-mini-player')}
         style={{ cursor: 'grab' }}
         title="拖曳移動視窗 / 雙擊切換迷你模式"
       />
-      <div className="absolute inset-y-0 left-0 w-3 z-40 drag-region" />
-      <div className="absolute inset-y-0 right-0 w-3 z-40 drag-region" />
-      <div className="absolute bottom-0 left-0 w-full h-3 z-40 drag-region" />
+      <div className="absolute inset-y-0 left-0 w-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
+      <div className="absolute inset-y-0 right-0 w-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
+      <div className="absolute bottom-0 left-0 w-full h-3 z-40 select-none" onMouseDown={handleDragMouseDown} style={{ cursor: 'grab' }} />
 
       {/* Controls Overlay */}
       <div 

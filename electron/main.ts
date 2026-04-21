@@ -198,6 +198,12 @@ app.whenReady().then(() => {
     win?.close();
   });
 
+  ipcMain.on('window-drag', (_, { deltaX, deltaY }: { deltaX: number; deltaY: number }) => {
+    if (!win) return;
+    const [x, y] = win.getPosition();
+    win.setPosition(x + deltaX, y + deltaY);
+  });
+
   ipcMain.on('boss-key-hide', () => {
     win?.webContents.send('media-pause-only');
     win?.hide();
