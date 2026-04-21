@@ -1,4 +1,4 @@
-import { app, BrowserWindow, session, shell, ipcMain, globalShortcut, clipboard } from 'electron'
+import { app, BrowserWindow, session, shell, ipcMain, globalShortcut, clipboard, Tray, Menu, nativeImage } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
@@ -24,6 +24,7 @@ export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, 'public') : RENDERER_DIST
 
 let win: BrowserWindow | null
+let tray: Tray | null = null
 
 function createWindow() {
   const ua = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:130.0) Gecko/20100101 Firefox/130.0';
@@ -118,13 +119,68 @@ app.on('activate', () => {
   }
 })
 
-app.whenReady().then(() => {
-  // 開機自動安靜啟動
-  app.setLoginItemSettings({
-    openAtLogin: true,
-    openAsHidden: true
-  });
+function createTray() {
+  // 使用 16x16 黑色方塊作為模板圖示（macOS 會自動根據深/淺色模式調整顏色）
+  const iconBase64 = 'iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAAA1BMVEX///+nxBvIAAAACklEQVQI12NgAAAAAgAB4iG8MwAAAABJRU5ErkJggg=='
+  const icon = nativeImage.createFromDataURL(`data:image/png;base64,${iconBase64}`)
+  icon.setTemplateImage(true)
 
+  tray = new Tray(icon)
+  tray.setToolTip('FloatTube')
+
+  const updateMenu = () => {
+    const isVisible = win?.isVisible() ?? false
+    const contextMenu = Menu.buildFromTemplate([
+      {
+        label: isVisible ? '隱藏視窗' : '顯示視窗',
+        click: () => {
+          if (win?.isVisible()) {
+            win?.webContents.send('media-pause-only')
+            win?.hide()
+          } else {
+            win?.show()
+          }
+          updateMenu()
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '開機時自動啟動',
+        type: 'checkbox',
+        checked: app.getLoginItemSettings().openAtLogin,
+        click: (menuItem) => {
+          app.setLoginItemSettings({
+            openAtLogin: menuItem.checked,
+            openAsHidden: true
+          })
+        }
+      },
+      { type: 'separator' },
+      {
+        label: '結束 FloatTube',
+        click: () => {
+          app.quit()
+        }
+      }
+    ])
+    tray?.setContextMenu(contextMenu)
+  }
+
+  updateMenu()
+
+  // 左鍵單擊切換顯示/隱藏
+  tray.on('click', () => {
+    if (win?.isVisible()) {
+      win?.webContents.send('media-pause-only')
+      win?.hide()
+    } else {
+      win?.show()
+    }
+    updateMenu()
+  })
+}
+
+app.whenReady().then(() => {
   // 迷你模式切換
   let normalBounds: Electron.Rectangle | null = null;
   ipcMain.on('toggle-mini-player', () => {
@@ -139,7 +195,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('window-close', () => {
-    BrowserWindow.getFocusedWindow()?.close();
+    win?.close();
   });
 
   ipcMain.on('boss-key-hide', () => {
@@ -198,4 +254,5 @@ app.whenReady().then(() => {
   });
   
   createWindow();
+  createTray();
 })

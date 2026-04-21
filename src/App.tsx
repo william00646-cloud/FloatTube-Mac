@@ -8,6 +8,7 @@ function App() {
   const [isImmersive, setIsImmersive] = useState(false)
   const [opacity, setOpacity] = useState(1.0)
   const [immersiveKey, setImmersiveKey] = useState<string | null>(null)
+  const [clipboardToast, setClipboardToast] = useState<string | null>(null)
   
   const webviewRef = useRef<any>(null)
   const lastClipboard = useRef<string>('')
@@ -46,6 +47,13 @@ function App() {
       setIsImmersive(false)
       setImmersiveKey(null)
     } else {
+      // 只在影片頁面套用沉浸模式
+      const currentUrl: string = await wv.executeJavaScript('window.location.href')
+      if (!currentUrl.includes('youtube.com/watch')) {
+        setClipboardToast('請先開啟 YouTube 影片再使用沉浸模式')
+        setTimeout(() => setClipboardToast(null), 3000)
+        return
+      }
       const css = `
         ytd-masthead, #masthead-container { display: none !important; }
         #secondary { display: none !important; }
@@ -105,6 +113,8 @@ function App() {
           lastClipboard.current = text
           if (text.includes('youtube.com/watch') || text.includes('youtu.be/')) {
             webviewRef.current?.loadURL(text)
+            setClipboardToast('偵測到 YouTube 連結，已自動載入')
+            setTimeout(() => setClipboardToast(null), 3000)
           }
         }
       } catch (err) {}
@@ -144,9 +154,25 @@ function App() {
     >
       {/* Ghost Mode Overlay Indicator */}
       {isGhostMode && (
-        <div className="absolute inset-0 bg-transparent flex items-center justify-center pointer-events-none z-40 transition-opacity">
-          <div className="bg-black/80 text-white/70 px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md text-sm border border-white/10 shadow-lg">
-            <Ghost size={16} /> 幽靈模式中 (按 Cmd+Opt+U 解除)
+        <div className="absolute inset-0 bg-transparent flex items-center justify-center z-40 transition-opacity">
+          <button
+            className="bg-black/80 text-white/70 px-4 py-2 rounded-full flex items-center gap-2 backdrop-blur-md text-sm border border-white/10 shadow-lg hover:bg-black/90 hover:text-white/90 transition-all cursor-pointer"
+            title="點擊解除幽靈模式"
+            onClick={() => {
+              ;(window as any).ipcRenderer.send('set-ghost-mode', false)
+              setIsGhostMode(false)
+            }}
+          >
+            <Ghost size={16} /> 幽靈模式中，點此解除
+          </button>
+        </div>
+      )}
+
+      {/* Toast 通知 */}
+      {clipboardToast && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="bg-black/85 text-white/90 px-4 py-2 rounded-full text-xs backdrop-blur-md border border-white/10 shadow-lg whitespace-nowrap">
+            {clipboardToast}
           </div>
         </div>
       )}
@@ -155,8 +181,8 @@ function App() {
       <div 
         className="absolute top-0 left-0 w-full h-4 z-40 drag-region" 
         onDoubleClick={() => (window as any).ipcRenderer.send('toggle-mini-player')}
-        style={{ cursor: 'pointer' }}
-        title="Double Click Setup"
+        style={{ cursor: 'grab' }}
+        title="拖曳移動視窗 / 雙擊切換迷你模式"
       />
       <div className="absolute inset-y-0 left-0 w-3 z-40 drag-region" />
       <div className="absolute inset-y-0 right-0 w-3 z-40 drag-region" />
